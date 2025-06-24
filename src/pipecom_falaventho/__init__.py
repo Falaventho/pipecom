@@ -1,1 +1,1 @@
-# An os-agnostic wrapper for named pipes.
+# An os-agnostic handler for ipc via named pipes.
