@@ -1,16 +1,18 @@
-from ._exceptions import PipeError
 from threading import Thread
 import time
+import base64
+
 import win32file
-import pywintypes
 import win32pipe
 import win32con
-import winerror
 import win32event
-import base64
+import winerror
+import pywintypes
 
 import win32security as ws
 import ntsecuritycon as ntc
+
+from ._exceptions import PipeError
 
 ACK = "ACK".encode('utf-8')
 
