@@ -186,7 +186,7 @@ class TestPipecom(unittest.TestCase):
             decoded_msg = message.decode('utf-8') if isinstance(message, bytes) else str(message)
             main_messages.append(decoded_msg)
             print(f"Main pipe received: {decoded_msg}")
-            
+
             # Return a response that will be sent to the response pipe
             return f"Processed: {decoded_msg}"
 
@@ -200,11 +200,11 @@ class TestPipecom(unittest.TestCase):
         # Create main pipe (without response_pipe_name for now)
         main_pipe_name = f"{self.test_pipe_name}_main"
         response_pipe_name = f"{self.test_pipe_name}_response"
-        
+
         # Start the response pipe listener first
         response_pipe = pipecom.Pipe(response_pipe_name, response_callback)
         response_pipe.listen()
-        
+
         time.sleep(0.2)  # Allow response pipe to start
 
         # Start the main pipe listener with response_pipe_name configured
@@ -215,7 +215,7 @@ class TestPipecom(unittest.TestCase):
 
         # Send test messages to the main pipe
         test_messages = ["Request 1", "Request 2", "Request 3"]
-        
+
         for msg in test_messages:
             print(f"Sending to main pipe: {msg}")
             result = pipecom.send(main_pipe_name, msg, timeout=5, max_attempts=3)
@@ -235,15 +235,15 @@ class TestPipecom(unittest.TestCase):
         # Check that responses were sent to the response pipe
         for msg in test_messages:
             expected_response = f"Processed: {msg}"
-            self.assertIn(expected_response, response_messages, 
-                         f"Response '{expected_response}' should be received on response pipe")
+            self.assertIn(expected_response, response_messages,
+                          f"Response '{expected_response}' should be received on response pipe")
 
         # Clean up both pipes
         try:
             pipecom.send(main_pipe_name, "PIPECOM_DIE", timeout=1, max_attempts=1)
         except Exception:
             pass
-        
+
         try:
             pipecom.send(response_pipe_name, "PIPECOM_DIE", timeout=1, max_attempts=1)
         except Exception:
@@ -265,11 +265,11 @@ class TestPipecom(unittest.TestCase):
         # Create main pipe with non-existent response pipe
         main_pipe_name = f"{self.test_pipe_name}_error_main"
         nonexistent_response_pipe = f"{self.test_pipe_name}_nonexistent"
-        
+
         # Start main pipe with reference to non-existent response pipe
         main_pipe = pipecom.Pipe(
-            main_pipe_name, 
-            error_prone_callback, 
+            main_pipe_name,
+            error_prone_callback,
             response_pipe_name=nonexistent_response_pipe
         )
         main_pipe.listen()
@@ -278,7 +278,7 @@ class TestPipecom(unittest.TestCase):
 
         # Send a message - this should still work even if response pipe fails
         test_message = "Test message for error handling"
-        
+
         try:
             result = pipecom.send(main_pipe_name, test_message, timeout=5, max_attempts=3)
             # The main message should still be processed successfully
@@ -290,8 +290,8 @@ class TestPipecom(unittest.TestCase):
         time.sleep(0.2)
 
         # Verify the main message was still received
-        self.assertIn(test_message, main_messages, 
-                     "Main message should be received even if response pipe fails")
+        self.assertIn(test_message, main_messages,
+                      "Main message should be received even if response pipe fails")
 
         # Clean up
         try:
