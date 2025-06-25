@@ -54,7 +54,7 @@ def send(pipe: str | Pipe, message: str, timeout: int = 0, max_attempts: int = 0
         timeout (int): Time in seconds to wait for the message to be sent. If set to 0, it will wait indefinitely.
         max_attempts (int): Maximum number of attempts to send the message. If set to 0, it will attempt indefinitely.
     Returns:
-        bool: True if the message was sent successfully, False otherwise.
+        bool: True if the message was sent and acknowledged, False otherwise.
     Raises:
         PipeError: If there is an error sending the message.
     """
