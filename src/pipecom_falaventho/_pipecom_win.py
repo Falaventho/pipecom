@@ -1,4 +1,4 @@
-from _exceptions import PipeError
+from ._exceptions import PipeError
 from threading import Thread
 import time
 import win32file
@@ -10,7 +10,6 @@ import base64
 import win32security as ws
 import ntsecuritycon as ntc
 
-keep_alive = True
 ACK = "ACK".encode('utf-8')
 
 
@@ -24,7 +23,7 @@ def listen(pipe_name: str, callback: callable, timeout: int, max_messages: int, 
         kill_thread.start()
 
 
-def send(pipe_name: str, message: str, timeout: int, max_attempts: int):
+def send(pipe_name: str, message: str, timeout: int, max_attempts: int) -> bool:
     try:
         pipe_string = f'\\\\.\\pipe\\{pipe_name}'
         pipe = win32file.CreateFile(
@@ -71,8 +70,7 @@ def send(pipe_name: str, message: str, timeout: int, max_attempts: int):
                         error_code=PipeError.TIMEOUT,
                         context={
                             "pipe_name": pipe_string,
-                            "timeout": timeout,
-                            "attempts": attempt + 1
+                            "timeout": timeout,                        "attempts": attempt + 1
                         }
                     )
                 attempt += 1
@@ -87,7 +85,7 @@ def send(pipe_name: str, message: str, timeout: int, max_attempts: int):
                     }
                 )
     except pywintypes.error as e:
-        if e.winerror == win32con.ERROR_PIPE_BUSY:
+        if hasattr(win32con, 'ERROR_PIPE_BUSY') and e.winerror == win32con.ERROR_PIPE_BUSY:
             raise PipeError(
                 message="Pipe is busy",
                 error_code=PipeError.PERMISSION_DENIED,
@@ -99,7 +97,7 @@ def send(pipe_name: str, message: str, timeout: int, max_attempts: int):
         else:
             raise PipeError(
                 message=f"Failed to connect to pipe: {e}",
-                error_code=PipeError.UNKNOWN,
+                error_code=PipeError.CONNECTION_FAILED,
                 context={
                     "pipe_name": pipe_string,
                     "error": str(e)
@@ -110,7 +108,10 @@ def send(pipe_name: str, message: str, timeout: int, max_attempts: int):
         raise
 
     finally:
-        win32file.CloseHandle(pipe)
+        if 'pipe' in locals():
+            win32file.CloseHandle(pipe)
+
+    return False
 
 
 def _handler(pipe_string, callback, max_messages, die_code, response_pipe_name, buffer_size):
@@ -127,14 +128,14 @@ def _handler(pipe_string, callback, max_messages, die_code, response_pipe_name, 
         PipeError: If there is an error starting the listener or processing messages.
 
     """
-    global keep_alive
+    keep_alive = True
 
     def handle_connection(pipe):
+        nonlocal keep_alive
         try:
             hr, message = win32file.ReadFile(pipe, buffer_size)
             if message == die_code.encode('utf-8'):
                 win32file.WriteFile(pipe, ACK)
-                global keep_alive
                 keep_alive = False
                 return
             decoded_message = base64.b64decode(message).decode('utf-8')

@@ -3,9 +3,9 @@ import platform
 os_name = platform.system().lower()
 
 if os_name == 'windows':
-    import _pipecom_win as pc
+    from . import _pipecom_win as pc
 elif os_name == 'linux' or os_name == 'darwin':
-    import _pipecom_posix as pc
+    from . import _pipecom_posix as pc
 
 
 class Pipe():
@@ -46,7 +46,7 @@ class Pipe():
             raise
 
 
-def send(pipe: str | Pipe, message: str, timeout: int = 0, max_attempts: int = 0):
+def send(pipe: str | Pipe, message: str, timeout: int = 0, max_attempts: int = 0) -> bool:
     """Send a message through a named pipe.
     Args:
         pipe (str|Pipe): The name of the pipe or a Pipe object to send the message through.
