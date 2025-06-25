@@ -191,11 +191,11 @@ def _handler(pipe_string, callback, max_messages, die_code, response_pipe_name, 
         nonlocal keep_alive
         try:
             hr, message = win32file.ReadFile(pipe, buffer_size)
-            if message == die_code.encode('utf-8'):
+            decoded_message = base64.b64decode(message).decode('utf-8')
+            if message == die_code:
                 win32file.WriteFile(pipe, ACK)
                 keep_alive = False
                 return
-            decoded_message = base64.b64decode(message).decode('utf-8')
             result = callback(decoded_message)
             win32file.WriteFile(pipe, ACK)
         except Exception:
