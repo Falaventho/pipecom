@@ -185,19 +185,6 @@ def send(pipe_name: str, message: str, timeout: int, max_attempts: int) -> bool:
 
 
 def _handler(pipe_string, callback, max_messages, die_code, response_pipe_name, buffer_size):
-    """Handles incoming connections on a named pipe and processes messages.
-
-    Args:
-        pipe_string (str): The name of the pipe to listen on.
-        callback (callable): Function that runs when a message is received. Will pass the message as an argument.
-        max_messages (int): Maximum number of messages to process before stopping. If set to 0, it will process messages indefinitely.
-        die_code (str): A special code that will stop the listener when received.
-        response_pipe_name (str): Name of a response pipe over which to send the return value.
-        buffer_size (int): Size of the buffer for reading messages.
-    Raises:
-        PipeError: If there is an error starting the listener or processing messages.
-
-    """
     keep_alive = True
 
     def handle_connection(pipe):
