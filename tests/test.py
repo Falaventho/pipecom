@@ -82,9 +82,17 @@ class TestPipecom(unittest.TestCase):
         """Test timeout scenarios."""
         print("\n=== Testing Timeout Handling ===")
 
-        # Try to send to non-existent pipe with short timeout
+        def slow_callback(message):
+            """Callback that simulates a slow response."""
+            time.sleep(3)
+
+        # Start listener
+        pipe = pipecom.Pipe("slow_pipe", slow_callback)
+        pipe.listen()
+
+        # Try to send to unresponsive pipe with short timeout
         with self.assertRaises(PipeError) as context:
-            pipecom.send("nonexistent_pipe", "test", timeout=1, max_attempts=1)
+            pipecom.send("slow_pipe", "test", timeout=1, max_attempts=1)
 
         print(f"Expected timeout error: {context.exception}")
 
