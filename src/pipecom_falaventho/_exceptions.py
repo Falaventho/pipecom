@@ -13,6 +13,7 @@ class PipeError(Exception):
     PERMISSION_DENIED = "PERMISSION_DENIED"
     TIMEOUT = "TIMEOUT"
     UNKNOWN = "UNKNOWN"
+    DEBUG = "DEBUG"
 
     def __init__(self, message: str, error_code: str, context=None):
         """Initialize PipeError.
