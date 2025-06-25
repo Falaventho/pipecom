@@ -5,6 +5,8 @@ import win32file
 import pywintypes
 import win32pipe
 import win32con
+import winerror
+import win32event
 import base64
 
 import win32security as ws
@@ -26,15 +28,26 @@ def listen(pipe_name: str, callback: callable, timeout: int, max_messages: int, 
 def send(pipe_name: str, message: str, timeout: int, max_attempts: int) -> bool:
     try:
         pipe_string = f'\\\\.\\pipe\\{pipe_name}'
-        pipe = win32file.CreateFile(
-            pipe_string,
-            win32con.GENERIC_READ | win32con.GENERIC_WRITE,
-            0,
-            None,
-            win32con.OPEN_EXISTING,
-            0,
-            None
-        )
+        if timeout > 0:
+            pipe = win32file.CreateFile(
+                pipe_string,
+                win32con.GENERIC_READ | win32con.GENERIC_WRITE,
+                0,
+                None,
+                win32con.OPEN_EXISTING,
+                win32con.FILE_FLAG_OVERLAPPED,
+                None
+            )
+        else:
+            pipe = win32file.CreateFile(
+                pipe_string,
+                win32con.GENERIC_READ | win32con.GENERIC_WRITE,
+                0,
+                None,
+                win32con.OPEN_EXISTING,
+                0,
+                None
+            )
 
         win32pipe.SetNamedPipeHandleState(pipe, win32pipe.PIPE_READMODE_MESSAGE, None, None)
         encoded_message = base64.b64encode(message.encode('utf-8'))
@@ -46,10 +59,60 @@ def send(pipe_name: str, message: str, timeout: int, max_attempts: int) -> bool:
                 win32file.WriteFile(pipe, encoded_message)
                 # Wait for ACK with timeout
                 if timeout > 0:
-                    ready = win32file.ReadFile(pipe, 1024)
+                    overlapped = pywintypes.OVERLAPPED()
+                    overlapped.Offset = 0  # Starting offset for the read operation
+                    overlapped.hEvent = win32event.CreateEvent(None, 1, 0, None)  # Create an event
+                    buffer = win32file.AllocateReadBuffer(3)
+                    ready = win32file.ReadFile(pipe, buffer, overlapped)
                     hr, response = ready
+                    if hr == winerror.ERROR_IO_PENDING:
+                        remaining_time = int((start_time + timeout - time.time()) * 1000)
+                        if remaining_time < 0:
+                            raise PipeError(
+                                message="Timeout waiting for ACK",
+                                error_code=PipeError.TIMEOUT,
+                                context={
+                                    "pipe_name": pipe_string,
+                                    "timeout": timeout,
+                                    "attempts": attempt + 1
+                                }
+                            )
+                        wait_result = win32event.WaitForSingleObject(overlapped.hEvent, remaining_time)
+                        if wait_result == win32con.WAIT_TIMEOUT:
+                            # Cancel the pending operation
+                            try:
+                                win32file.CancelIo(pipe)
+                            except Exception:
+                                pass
+                            raise PipeError(
+                                message="Timeout waiting for ACK",
+                                error_code=PipeError.TIMEOUT,
+                                context={
+                                    "pipe_name": pipe_string,
+                                    "timeout": timeout,
+                                    "attempts": attempt + 1
+                                }
+                            )
+                        elif wait_result == win32con.WAIT_OBJECT_0:
+                            # Operation completed successfully, continue with GetOverlappedResult
+                            bytes_read = win32file.GetOverlappedResult(pipe, overlapped, True)
+                            data = buffer[:bytes_read]
+                        else:
+                            # Wait failed for some other reason
+                            raise PipeError(
+                                message="Wait operation failed",
+                                error_code=PipeError.UNKNOWN,
+                                context={
+                                    "pipe_name": pipe_string,
+                                    "wait_result": wait_result,
+                                    "attempts": attempt + 1
+                                }
+                            )
+                    else:
+                        # Operation completed synchronously
+                        data = buffer[:len(data)]  # Extract the data
                 else:
-                    hr, response = win32file.ReadFile(pipe, 1024)
+                    hr, response = win32file.ReadFile(pipe, 3)
                 if response == ACK:
                     return True
                 else:
@@ -70,11 +133,16 @@ def send(pipe_name: str, message: str, timeout: int, max_attempts: int) -> bool:
                         error_code=PipeError.TIMEOUT,
                         context={
                             "pipe_name": pipe_string,
-                            "timeout": timeout,                        "attempts": attempt + 1
+                            "timeout": timeout,
+                            "attempts": attempt + 1
                         }
                     )
                 attempt += 1
                 time.sleep(0.1)
+
+            except PipeError:
+                raise
+
             except Exception as e:
                 raise PipeError(
                     message=f"Error sending message: {e}",
@@ -219,5 +287,5 @@ def _kill_pipe(pipe_name, timeout, die_code, pipe_thread: Thread):
     while time.time() < end_time:
         time.sleep(0.1)
     while pipe_thread is not None and pipe_thread.is_alive():
-        # send(pipe_name, die_code, timeout=0, max_attempts=0)
+        send(pipe_name, die_code, timeout=5, max_attempts=5)
         pipe_thread.join(timeout=0.1)
