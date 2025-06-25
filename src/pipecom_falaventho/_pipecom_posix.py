@@ -133,6 +133,13 @@ def _handler(pipe_name, callback, max_messages, die_code, response_pipe_name):
             encoded_ack = base64.b64encode(ACK.encode('utf-8')).decode('utf-8')
             fifo_out.write(encoded_ack + '\n')
             fifo_out.close()
+
+            # Send result to response pipe if configured
+            if response_pipe_name is not None:
+                try:
+                    send(response_pipe_name, result, timeout=5, max_attempts=3)
+                except Exception as e:
+                    print(f"Warning: Failed to send to response pipe '{response_pipe_name}': {e}")
         except Exception:
             raise PipeError(
                 message="Error in listen handler",

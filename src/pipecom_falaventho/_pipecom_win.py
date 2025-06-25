@@ -212,7 +212,12 @@ def _handler(pipe_string, callback, max_messages, die_code, response_pipe_name, 
         finally:
             win32file.CloseHandle(pipe)
 
-        return result
+        if response_pipe_name is not None:
+            try:
+                send(response_pipe_name, result, timeout=5, max_attempts=3)
+            except Exception as e:
+                print(f"Warning: Failed to send to response pipe '{response_pipe_name}': {e}")
+        return
 
     sa = _generate_sa()
     message_count = 0
