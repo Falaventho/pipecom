@@ -239,8 +239,6 @@ def _handler(pipe_string, callback, max_messages, die_code, response_pipe_name, 
                 if message_count >= max_messages:
                     keep_alive = False
 
-        except PipeError:
-            raise
         except Exception:
             raise
 
