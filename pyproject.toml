@@ -1,0 +1,23 @@
+[build-system]
+requires =  ["setuptools >= 78.1.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pipecom_falaventho"
+version = "0.0.1"
+authors = [
+    {name="Falaventho"}
+]
+description = "An os-agnostic handler for ipc via named pipes."
+readme = "README.md"
+requires-python=">=3.13"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent"
+]
+license="MIT"
+license-files = ["LICENSE"]
+
+[project.urls]
+Homepage = "https://github.com/falaventho/pipecom"
+Issues = "https://github.com/falaventho/pipecom/issues"
