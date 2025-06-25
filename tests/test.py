@@ -173,6 +173,132 @@ class TestPipecom(unittest.TestCase):
 
         print(f"Total messages received: {len(self.messages_received)}")
 
+    def test_response_pipe_functionality(self):
+        """Test response pipe functionality for bidirectional communication."""
+        print("\n=== Testing Response Pipe Functionality ===")
+
+        # Track messages received on both pipes
+        main_messages = []
+        response_messages = []
+
+        def main_callback(message):
+            """Main pipe callback that processes requests and returns responses."""
+            decoded_msg = message.decode('utf-8') if isinstance(message, bytes) else str(message)
+            main_messages.append(decoded_msg)
+            print(f"Main pipe received: {decoded_msg}")
+            
+            # Return a response that will be sent to the response pipe
+            return f"Processed: {decoded_msg}"
+
+        def response_callback(message):
+            """Response pipe callback that receives the processed results."""
+            decoded_msg = message.decode('utf-8') if isinstance(message, bytes) else str(message)
+            response_messages.append(decoded_msg)
+            print(f"Response pipe received: {decoded_msg}")
+            return f"Response ACK: {decoded_msg}"
+
+        # Create main pipe (without response_pipe_name for now)
+        main_pipe_name = f"{self.test_pipe_name}_main"
+        response_pipe_name = f"{self.test_pipe_name}_response"
+        
+        # Start the response pipe listener first
+        response_pipe = pipecom.Pipe(response_pipe_name, response_callback)
+        response_pipe.listen()
+        
+        time.sleep(0.2)  # Allow response pipe to start
+
+        # Start the main pipe listener with response_pipe_name configured
+        main_pipe = pipecom.Pipe(main_pipe_name, main_callback, response_pipe_name=response_pipe_name)
+        main_pipe.listen()
+
+        time.sleep(0.2)  # Allow main pipe to start
+
+        # Send test messages to the main pipe
+        test_messages = ["Request 1", "Request 2", "Request 3"]
+        
+        for msg in test_messages:
+            print(f"Sending to main pipe: {msg}")
+            result = pipecom.send(main_pipe_name, msg, timeout=5, max_attempts=3)
+            self.assertTrue(result, f"Message '{msg}' should be sent successfully to main pipe")
+            time.sleep(0.2)  # Allow processing time
+
+        time.sleep(0.5)  # Allow all messages to be processed
+
+        # Verify messages were received on both pipes
+        print(f"Main pipe received {len(main_messages)} messages: {main_messages}")
+        print(f"Response pipe received {len(response_messages)} messages: {response_messages}")
+
+        # Check that all messages were received on the main pipe
+        for msg in test_messages:
+            self.assertIn(msg, main_messages, f"Message '{msg}' should be received on main pipe")
+
+        # Check that responses were sent to the response pipe
+        for msg in test_messages:
+            expected_response = f"Processed: {msg}"
+            self.assertIn(expected_response, response_messages, 
+                         f"Response '{expected_response}' should be received on response pipe")
+
+        # Clean up both pipes
+        try:
+            pipecom.send(main_pipe_name, "PIPECOM_DIE", timeout=1, max_attempts=1)
+        except Exception:
+            pass
+        
+        try:
+            pipecom.send(response_pipe_name, "PIPECOM_DIE", timeout=1, max_attempts=1)
+        except Exception:
+            pass
+
+    def test_response_pipe_error_handling(self):
+        """Test response pipe error handling when response pipe is unavailable."""
+        print("\n=== Testing Response Pipe Error Handling ===")
+
+        main_messages = []
+
+        def error_prone_callback(message):
+            """Callback that tries to send to non-existent response pipe."""
+            decoded_msg = message.decode('utf-8') if isinstance(message, bytes) else str(message)
+            main_messages.append(decoded_msg)
+            print(f"Main pipe received: {decoded_msg}")
+            return f"Response: {decoded_msg}"
+
+        # Create main pipe with non-existent response pipe
+        main_pipe_name = f"{self.test_pipe_name}_error_main"
+        nonexistent_response_pipe = f"{self.test_pipe_name}_nonexistent"
+        
+        # Start main pipe with reference to non-existent response pipe
+        main_pipe = pipecom.Pipe(
+            main_pipe_name, 
+            error_prone_callback, 
+            response_pipe_name=nonexistent_response_pipe
+        )
+        main_pipe.listen()
+
+        time.sleep(0.2)
+
+        # Send a message - this should still work even if response pipe fails
+        test_message = "Test message for error handling"
+        
+        try:
+            result = pipecom.send(main_pipe_name, test_message, timeout=5, max_attempts=3)
+            # The main message should still be processed successfully
+            # even if the response pipe send fails
+            print(f"Send result: {result}")
+        except Exception as e:
+            print(f"Expected error when response pipe is unavailable: {e}")
+
+        time.sleep(0.2)
+
+        # Verify the main message was still received
+        self.assertIn(test_message, main_messages, 
+                     "Main message should be received even if response pipe fails")
+
+        # Clean up
+        try:
+            pipecom.send(main_pipe_name, "PIPECOM_DIE", timeout=1, max_attempts=1)
+        except Exception:
+            pass
+
 
 def run_interactive_test():
     """Run an interactive test for manual verification."""
