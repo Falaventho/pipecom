@@ -1,22 +1,25 @@
 [build-system]
-requires =  ["setuptools >= 78.1.0"]
 build-backend = "setuptools.build_meta"
+requires = ["setuptools >= 78.1.0"]
 
 [project]
-name = "pipecom_falaventho"
-version = "0.0.1"
 authors = [
     {name="Falaventho"}
 ]
-description = "An os-agnostic handler for ipc via named pipes."
-readme = "README.md"
-requires-python=">=3.13"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent"
 ]
-license="MIT"
+dependencies = [
+    'pywin32 ; platform_system == "Windows"',
+]
+description = "An os-agnostic handler for string-based ipc via named pipes."
+license = "MIT"
 license-files = ["LICENSE"]
+name = "pipecom_falaventho"
+readme = "README.md"
+requires-python = ">=3.13"
+version = "0.0.1"
 
 [project.urls]
 Homepage = "https://github.com/falaventho/pipecom"
