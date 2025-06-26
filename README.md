@@ -27,7 +27,6 @@ import pipecom
 
 def message_handler(message):
     print(f"Received: {message}")
-    return f"Processed: {message}"
 
 # Create and start a pipe listener
 pipe = pipecom.Pipe("my_pipe", message_handler)
@@ -43,8 +42,8 @@ input("Press Enter to stop...")
 import pipecom
 
 # Send a message
-result = pipecom.send("my_pipe", "Hello, World!", timeout=5)
-if result:
+message_sent = pipecom.send("my_pipe", "Hello, World!")
+if message_sent:
     print("Message sent successfully!")
 else:
     print("Failed to send message")
@@ -53,11 +52,21 @@ else:
 ### Advanced Usage with Response Pipe
 
 ```python
+import sys
+import os
+import threading
+
+try:
+    sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
+except Exception:
+    pass
+
 import pipecom_falaventho as pipecom
 import time
 
 # Track responses received
 responses_received = []
+
 
 def task_processor(message):
     """Main pipe callback that processes tasks and returns results."""
@@ -71,12 +80,14 @@ def task_processor(message):
     else:
         return f"SUCCESS: Completed {message}"
 
+
 def response_handler(message):
     """Response pipe callback that receives processing results."""
     decoded_msg = message.decode('utf-8') if isinstance(message, bytes) else str(message)
     responses_received.append(decoded_msg)
     print(f"📋 Result received: {decoded_msg}")
     return f"Result acknowledged: {decoded_msg}"
+
 
 # Set up bidirectional communication
 main_pipe_name = "task_processor"
@@ -123,23 +134,30 @@ for task in tasks:
 # Wait for all processing to complete
 time.sleep(2)
 
-print(f"\n📊 Summary:")
+print("\n📊 Summary:")
 print(f"Tasks sent: {len(tasks)}")
 print(f"Results received: {len(responses_received)}")
 print("Results:")
 for response in responses_received:
     print(f"  - {response}")
 
-# Shutdown both pipes
+# Shutdown both pipes - main pipe first to avoid response pipe issues
 try:
     pipecom.send(main_pipe_name, "SHUTDOWN", timeout=5)
+    print("✅ Main pipe shutdown successfully")
 except Exception as e:
-    print(f"Error shutting down main pipe: {e}")
+    print(f"❌ Error shutting down main pipe: {e}")
+
+# Wait a moment for main pipe to fully shutdown
+time.sleep(0.5)
 
 try:
     pipecom.send(response_pipe_name, "PIPECOM_DIE", timeout=5)
+    print("✅ Response pipe shutdown successfully")
 except Exception as e:
-    print(f"Error shutting down response pipe: {e}")
+    print(f"❌ Error shutting down response pipe: {e}")
+
+print("\n🎉 Demo completed!")
 ```
 
 ## API Reference
@@ -156,7 +174,7 @@ Pipe(pipe_name, callback, timeout=0, max_messages=0, die_code="PIPECOM_DIE",
 **Parameters:**
 
 - `pipe_name` (str): Name of the pipe to listen on
-- `callback` (callable): Function called when a message is received
+- `callback` (callable): Function called when a message is received - message is passed as param
 - `timeout` (int): Seconds to wait before auto-shutdown (0 = indefinite)
 - `max_messages` (int): Maximum messages to process before stopping (0 = unlimited)
 - `die_code` (str): Special message that triggers shutdown
@@ -215,43 +233,6 @@ Custom exception for pipe-related errors.
 - `context`: Additional error context (dict)
 
 ## Examples
-
-### Simple Chat System
-
-```python
-import pipecom_falaventho as pipecom
-import threading
-import time
-
-def chat_handler(message):
-    print(f"[CHAT] {message}")
-    return "Message received"
-
-# Start chat server
-chat_pipe = pipecom.Pipe("chat_room", chat_handler)
-chat_pipe.listen()
-
-# Simulate multiple clients
-def client_thread(client_id):
-    for i in range(3):
-        msg = f"Client {client_id}: Hello {i+1}"
-        pipecom.send("chat_room", msg, timeout=5)
-        time.sleep(1)
-
-# Start multiple clients
-threads = []
-for i in range(3):
-    t = threading.Thread(target=client_thread, args=(i,))
-    t.start()
-    threads.append(t)
-
-# Wait for clients to finish
-for t in threads:
-    t.join()
-
-# Shutdown chat server
-pipecom.send("chat_room", "PIPECOM_DIE", timeout=5)
-```
 
 ### Task Queue System
 
@@ -360,7 +341,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - Cross-platform named pipe support
 - Basic send/receive functionality
 - Error handling and timeouts
-- Comprehensive test suite
+- Functional test suite
 
 ## Support
 
@@ -370,4 +351,4 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ---
 
-Made with ❤️ by [Falaventho](https://github.com/falaventho)
+Made by [Falaventho](https://github.com/falaventho)
