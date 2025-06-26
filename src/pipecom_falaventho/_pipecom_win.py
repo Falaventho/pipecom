@@ -17,17 +17,36 @@ from ._exceptions import PipeError
 ACK = "ACK".encode('utf-8')
 
 
+def _validate_pipe_name(pipe_name: str):
+    """Validate pipe name to prevent problematic names."""
+    if not pipe_name or not pipe_name.strip():
+        raise PipeError("Pipe name cannot be empty or only whitespace", PipeError.INVALID_PIPE_NAME)
+
+    if '/' in pipe_name or '\\' in pipe_name:
+        raise PipeError("Pipe name cannot contain path separators", PipeError.INVALID_PIPE_NAME)
+
+    # Additional validation for problematic names
+    if pipe_name.isspace():
+        raise PipeError("Pipe name cannot be only whitespace", PipeError.INVALID_PIPE_NAME)
+
+
 def listen(pipe_name: str, callback: callable, timeout: int, max_messages: int, die_code: str, daemon: bool, response_pipe_name: str, buffer_size: int):
+    # Validate pipe name first
+    _validate_pipe_name(pipe_name)
+
     pipe_string = f'\\\\.\\pipe\\{pipe_name}'
     pipe_thread = Thread(target=_handler, args=(pipe_string, callback,
                          max_messages, die_code, response_pipe_name, buffer_size), daemon=daemon)
     pipe_thread.start()
     if timeout > 0:
-        kill_thread = Thread(target=_kill_pipe, args=(pipe_string, timeout, die_code, pipe_thread), daemon=True)
+        kill_thread = Thread(target=_kill_pipe, args=(pipe_name, timeout, die_code, pipe_thread), daemon=True)
         kill_thread.start()
 
 
 def send(pipe_name: str, message: str, timeout: int, max_attempts: int) -> bool:
+    # Validate pipe name first
+    _validate_pipe_name(pipe_name)
+
     try:
         pipe_string = f'\\\\.\\pipe\\{pipe_name}'
         if timeout > 0:
@@ -112,19 +131,20 @@ def send(pipe_name: str, message: str, timeout: int, max_attempts: int) -> bool:
                             )
                     else:
                         # Operation completed synchronously
-                        data = buffer[:len(data)]  # Extract the data
+                        data = response  # Use the response data directly
                 else:
-                    hr, response = win32file.ReadFile(pipe, 3)
-                if response == ACK:
+                    hr, data = win32file.ReadFile(pipe, 3)
+
+                if data == ACK:
                     return True
                 else:
                     raise PipeError(
-                        message=f"Expected ACK but received {response}",
+                        message=f"Expected ACK but received {data}",
                         error_code=PipeError.UNKNOWN,
                         context={
                             "pipe_name": pipe_string,
                             "expected": ACK,
-                            "received": response
+                            "received": data
                         }
                     )
             except pywintypes.error:
@@ -192,7 +212,7 @@ def _handler(pipe_string, callback, max_messages, die_code, response_pipe_name, 
         try:
             hr, message = win32file.ReadFile(pipe, buffer_size)
             decoded_message = base64.b64decode(message).decode('utf-8')
-            if message == die_code:
+            if decoded_message == die_code:
                 win32file.WriteFile(pipe, ACK)
                 keep_alive = False
                 return
@@ -233,11 +253,18 @@ def _handler(pipe_string, callback, max_messages, die_code, response_pipe_name, 
                 65536,
                 0,
                 sa
-            )            # blocking, awaits a connection
+            )
+
+            # Check if we should still be alive before blocking on connect
+            if not keep_alive:
+                win32file.CloseHandle(pipe)
+                break
+
+            # blocking, awaits a connection
             win32pipe.ConnectNamedPipe(pipe, None)
 
             # connection made
-            Thread(target=handle_connection, args=(pipe,)).start()
+            Thread(target=handle_connection, args=(pipe,), daemon=True).start()
 
             if max_messages > 0:
                 message_count += 1
@@ -276,8 +303,26 @@ def _generate_sa():
 def _kill_pipe(pipe_name, timeout, die_code, pipe_thread: Thread):
     start_time = time.time()
     end_time = start_time + timeout
+
+    # Wait for the timeout period
     while time.time() < end_time:
         time.sleep(0.1)
-    while pipe_thread is not None and pipe_thread.is_alive():
-        send(pipe_name, die_code, timeout=5, max_attempts=5)
-        pipe_thread.join(timeout=0.1)
+        # If the thread dies naturally during the timeout, we're done
+        if not pipe_thread.is_alive():
+            return
+
+    # After timeout, try to send die code a few times then give up
+    max_kill_attempts = 3
+    kill_attempt = 0
+
+    while pipe_thread.is_alive() and kill_attempt < max_kill_attempts:
+        try:
+            send(pipe_name, die_code, timeout=1, max_attempts=1)  # Short timeout
+            pipe_thread.join(timeout=0.5)  # Give it a moment to process
+            kill_attempt += 1
+        except Exception:
+            # If we can't send the die code, break out
+            break
+
+    # If thread is still alive after attempts, just return and let it be cleaned up
+    # as a daemon thread

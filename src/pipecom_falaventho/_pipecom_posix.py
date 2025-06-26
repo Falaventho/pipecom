@@ -8,7 +8,20 @@ import base64
 ACK = "ACK"
 
 
+def _validate_pipe_name(pipe_name: str):
+    """Validate pipe name to prevent problematic names."""
+    if not pipe_name or not pipe_name.strip():
+        raise PipeError("Pipe name cannot be empty or only whitespace", PipeError.INVALID_PIPE_NAME)
+
+    # Additional validation for problematic names
+    if pipe_name.isspace():
+        raise PipeError("Pipe name cannot be only whitespace", PipeError.INVALID_PIPE_NAME)
+
+
 def listen(pipe_name: str, callback: callable, timeout: int, max_messages: int, die_code: str, daemon: bool, response_pipe_name: str, buffer_size: int):
+    # Validate pipe name first
+    _validate_pipe_name(pipe_name)
+
     pipe_thread = Thread(target=_handler, args=(pipe_name, callback, max_messages,
                          die_code, response_pipe_name), daemon=daemon)
     pipe_thread.start()
@@ -18,6 +31,9 @@ def listen(pipe_name: str, callback: callable, timeout: int, max_messages: int, 
 
 
 def send(pipe_name: str, message: str, timeout: int, max_attempts: int = 0) -> bool:
+    # Validate pipe name first
+    _validate_pipe_name(pipe_name)
+
     ack_pipe_name = pipe_name + "_ack"
     fifo_in = None
     fifo_out = None
@@ -107,11 +123,13 @@ def _make_fifos(pipe_name, ack_pipe_name):
 def _handler(pipe_name, callback, max_messages, die_code, response_pipe_name):
     keep_alive = True
     ack_pipe_name = pipe_name + "_ack"
+    message_count = 0
 
     def handle_connection(fifo_in):
         nonlocal keep_alive
         nonlocal ack_pipe_name
         nonlocal pipe_name
+        nonlocal message_count
 
         fifo_out = None
         try:
@@ -129,32 +147,48 @@ def _handler(pipe_name, callback, max_messages, die_code, response_pipe_name):
                 fifo_out.close()
                 return  # Don't cleanup here - let the main handler do it
             result = callback(decoded_message)
+
+            # Count messages after successful processing
+            if max_messages > 0:
+                message_count += 1
+                if message_count >= max_messages:
+                    keep_alive = False
+
             fifo_out = open(ack_pipe_name, 'w', 1)
             encoded_ack = base64.b64encode(ACK.encode('utf-8')).decode('utf-8')
             fifo_out.write(encoded_ack + '\n')
             fifo_out.close()
 
             # Send result to response pipe if configured
-            if response_pipe_name is not None:
+            if response_pipe_name is not None and result is not None:
                 try:
-                    send(response_pipe_name, result, timeout=5, max_attempts=3)
+                    send(response_pipe_name, str(result), timeout=5, max_attempts=3)
                 except Exception as e:
                     print(f"Warning: Failed to send to response pipe '{response_pipe_name}': {e}")
         except Exception:
-            raise PipeError(
-                message="Error in listen handler",
-                error_code=PipeError.UNKNOWN,
-                context={
-                    "pipe_name": pipe_name,
-                    "callback":  callback.__name__,
-                    "response_pipe_name": response_pipe_name,
-                }
-            )
+            # Handle broken pipe errors gracefully - they can occur during shutdown
+            try:
+                raise PipeError(
+                    message="Error in listen handler",
+                    error_code=PipeError.UNKNOWN,
+                    context={
+                        "pipe_name": pipe_name,
+                        "callback":  callback.__name__,
+                        "response_pipe_name": response_pipe_name,
+                    }
+                )
+            except BrokenPipeError:
+                # Broken pipe during shutdown is expected
+                pass
         finally:
-            if fifo_in is not None:
-                fifo_in.close()
-            if fifo_out is not None:
-                fifo_out.close()
+            try:
+                if fifo_in is not None:
+                    fifo_in.close()
+                if fifo_out is not None:
+                    fifo_out.close()
+            except BrokenPipeError:
+                # Broken pipe during cleanup is expected during shutdown
+                pass
             # Don't cleanup fifos here - they should persist for multiple connections
 
         return result
@@ -176,7 +210,6 @@ def _handler(pipe_name, callback, max_messages, die_code, response_pipe_name):
                 exception_msg += f"\n- {e}"
         raise PipeError(exception_msg, PipeError.UNKNOWN)
 
-    message_count = 0
     try:
         while keep_alive:
             try:
@@ -186,10 +219,6 @@ def _handler(pipe_name, callback, max_messages, die_code, response_pipe_name):
                 # connection made
                 Thread(target=handle_connection, args=(fifo_in,), daemon=True).start()
 
-                if max_messages > 0:
-                    message_count += 1
-                    if message_count >= max_messages:
-                        keep_alive = False
             except Exception:
                 raise
     finally:
