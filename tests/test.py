@@ -6,8 +6,8 @@ try:
 except Exception:
     pass
 
-import pipecom_falaventho as pipecom
-from pipecom_falaventho import PipeError
+import pipecom as pipecom
+from pipecom import PipeError
 import time
 import threading
 import unittest

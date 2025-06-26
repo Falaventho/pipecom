@@ -6,8 +6,8 @@ try:
 except Exception:
     pass
 
-from pipecom_falaventho import pipecom
-from pipecom_falaventho._exceptions import PipeError
+from pipecom import pipecom
+from pipecom._exceptions import PipeError
 import time
 import json
 

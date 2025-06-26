@@ -6,7 +6,7 @@ try:
 except Exception:
     pass
 
-import pipecom_falaventho as pipecom
+import pipecom
 import time
 
 # Track responses received

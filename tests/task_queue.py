@@ -6,7 +6,7 @@ try:
 except Exception:
     pass
 
-import pipecom_falaventho as pipecom
+import pipecom as pipecom
 import time
 import json
 
