@@ -61,7 +61,7 @@ try:
 except Exception:
     pass
 
-import pipecom_falaventho as pipecom
+import pipecom as pipecom
 import time
 
 # Track responses received
@@ -245,7 +245,7 @@ try:
 except Exception:
     pass
 
-import pipecom_falaventho as pipecom
+import pipecom as pipecom
 import threading
 
 
@@ -343,7 +343,7 @@ print("🔊 Listening for messages...")
 ### Task Queue System
 
 ```python
-import pipecom_falaventho as pipecom
+import pipecom as pipecom
 import json
 import time
 
@@ -381,7 +381,7 @@ time.sleep(5)
 ## Error Handling
 
 ```python
-import pipecom_falaventho as pipecom
+import pipecom as pipecom
 
 try:
     result = pipecom.send("nonexistent_pipe", "test", timeout=5)
