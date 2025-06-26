@@ -130,14 +130,42 @@ class TestPipecom(unittest.TestCase):
         """Test error conditions and exception handling."""
         print("\n=== Testing Error Handling ===")
 
-        # Test invalid pipe name scenarios
-        invalid_names = ["", " ", "pipe/with/slashes"]
+        # Test invalid pipe name scenarios - different validation for different platforms
+        import platform
+
+        # These should be invalid on all platforms
+        always_invalid_names = ["", " "]
+
+        # Path separators - invalid on Windows, valid on POSIX
+        if platform.system().lower() == 'windows':
+            invalid_names = always_invalid_names + ["pipe/with/slashes", "pipe\\with\\backslashes"]
+        else:
+            # On POSIX systems, only test the always invalid names
+            # Path separators are valid and useful for organizing pipes
+            invalid_names = always_invalid_names
 
         for name in invalid_names:
             try:
                 pipecom.send(name, "test", timeout=1, max_attempts=1)
             except Exception as e:
                 print(f"Expected error for invalid pipe name '{name}': {e}")
+
+        # Test a valid path-based pipe name on POSIX systems
+        if platform.system().lower() != 'windows':
+            try:
+                # This should work on POSIX systems
+                path_pipe_name = "/tmp/test_path_pipe"
+                pipe = pipecom.Pipe(path_pipe_name, self.message_callback)
+                pipe.listen()
+                time.sleep(0.1)
+
+                result = pipecom.send(path_pipe_name, "Path test", timeout=2, max_attempts=2)
+                print(f"Path-based pipe test result: {result}")
+
+                # Clean up
+                pipecom.send(path_pipe_name, "PIPECOM_DIE", timeout=1, max_attempts=1)
+            except Exception as e:
+                print(f"Unexpected error with path-based pipe: {e}")
 
     def test_concurrent_clients(self):
         """Test multiple clients sending to the same pipe."""
