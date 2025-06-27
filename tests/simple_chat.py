@@ -6,7 +6,7 @@ try:
 except Exception:
     pass
 
-import pipecom as pipecom
+import pipecom
 import threading
 
 
