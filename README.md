@@ -412,12 +412,14 @@ python tests/test.py
 - Uses Windows Named Pipes API via `pywin32`
 - Pipe names are automatically prefixed with `\\\\.\\pipe\\`
 - Supports overlapped I/O for timeouts
+- Cleanup is handled by Windows when last handle on pipe is released
 
 ### Unix-like Systems (Linux, macOS)
 
 - Uses POSIX named pipes (FIFOs)
 - Pipe files are created in the current directory
 - Uses signal-based timeouts (main thread) or `select()` (other threads)
+- Cleanup is attempted on pipe disconnect, but should be handled manually.
 
 ## Performance Considerations
 
